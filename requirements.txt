@@ -1,0 +1,10 @@
+ccxt
+pandas
+numpy
+aiohttp
+python-dotenv
+scikit-learn
+joblib
+python-binance
+yfinance
+requests
