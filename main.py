@@ -5,13 +5,10 @@ import os
 import asyncio
 import aiohttp
 import json
-import requests
-import warnings
-warnings.filterwarnings("ignore")
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 import yfinance as yf
-from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from joblib import dump, load
 
@@ -21,27 +18,15 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 SIGNALS_FILE = "active_signals.json"
 RESULTS_FILE = "results.json"
-DATASET_FILE = "signals_dataset.csv"
-MODEL_FILE = "ai_model.joblib"
+DATASET_FILE = "signals_dataset_full.csv"
+MODEL_FILE = "ai_model_full.joblib"
 
-# ========== DATA YÜKLEYİCİLER ==========
-
-def fetch_yahoo_data(symbol, tf="1h", period="2y"):
+def fetch_yahoo_data(symbol, tf="1h", period="60d"):
     try:
         data = yf.download(symbol, period=period, interval=tf)
         data = data.reset_index()
         data['symbol'] = symbol
         return data
-    except Exception as e:
-        print(f"Yahoo data fetch error: {e}")
-        return None
-
-def fetch_cryptodatadownload(symbol="BTCUSD", market="Binance", tf="1h"):
-    url = f"https://www.cryptodatadownload.com/cdd/{market}_{symbol}_{tf}.csv"
-    try:
-        df = pd.read_csv(url, skiprows=1)
-        df['symbol'] = symbol
-        return df
     except:
         return None
 
@@ -50,61 +35,55 @@ def open_datasets():
         return
     print("Açık kaynak dataset yükleniyor...")
     ds = []
-    symbols = ["BTC-USD", "ETH-USD", "SOL-USD", "AAPL", "MSFT", "EURUSD=X", "GBPUSD=X"]
+    symbols = ["BTC-USD", "ETH-USD", "SOL-USD", "AAPL", "MSFT", "EURUSD=X", "GBPUSD=X", "NVDA", "TSLA", "META", "GOOGL", "AMZN", "USDJPY=X", "USDCAD=X"]
     for s in symbols:
-        df = fetch_yahoo_data(s, tf="1h", period="1y")
+        df = fetch_yahoo_data(s, tf="1h", period="180d")
         if df is not None and len(df) > 50:
             for _, row in df.iterrows():
-                close = float(row.get("Close", row.get("close", 0)))
-                open_ = float(row.get("Open", row.get("open", 0)))
-                high = float(row.get("High", row.get("high", 0)))
-                low = float(row.get("Low", row.get("low", 0)))
-                ds.append({
-                    "timestamp": str(row["Datetime"]) if "Datetime" in row else str(row["Date"]),
-                    "exchange": "yahoo",
-                    "symbol": s,
-                    "timeframe": "1h",
-                    "score": 6,
-                    "trend": "uptrend" if close > open_ else "downtrend",
-                    "orderflow_score": 0,
-                    "entry": open_,
-                    "sl": min(low, open_),
-                    "tp": max(high, open_),
-                    "direction": "LONG" if close > open_ else "SHORT",
-                    "result": "win" if abs(close-open_) > 0.005*open_ else "loss",
-                    "delta": 0, "volatility": abs(high-low), "session_time": True, "block_trade": False
-                })
-    df2 = fetch_cryptodatadownload("BTCUSD", "Binance", "1h")
-    if df2 is not None and len(df2) > 50:
-        for _, row in df2.iterrows():
-            try:
-                close = float(row.get("close", 0))
-                open_ = float(row.get("open", 0))
-                high = float(row.get("high", 0))
-                low = float(row.get("low", 0))
-                ds.append({
-                    "timestamp": str(row["date"]),
-                    "exchange": "cdd",
-                    "symbol": "BTC/USDT",
-                    "timeframe": "1h",
-                    "score": 6,
-                    "trend": "uptrend" if close > open_ else "downtrend",
-                    "orderflow_score": 0,
-                    "entry": open_,
-                    "sl": min(low, open_),
-                    "tp": max(high, open_),
-                    "direction": "LONG" if close > open_ else "SHORT",
-                    "result": "win" if abs(close-open_) > 0.005*open_ else "loss",
-                    "delta": 0, "volatility": abs(high-low), "session_time": True, "block_trade": False
-                })
-            except: continue
+                try:
+                    close = float(row["Close"])
+                    open_ = float(row["Open"])
+                    high = float(row["High"])
+                    low = float(row["Low"])
+                    volume = float(row["Volume"])
+                    # Mini “fake” analizler - örnek: open > close ise FVG var say vs (Demo için)
+                    feature = {
+                        "timestamp": str(row.get("Datetime", row.get("Date", ""))),
+                        "exchange": "yahoo",
+                        "symbol": s,
+                        "timeframe": "1h",
+                        "liquidity_zone": int(high - low < 0.5),  # Sadece örnek mantık!
+                        "order_block": int(open_ > close),
+                        "fvg": int(abs(open_-close) > 0.3),
+                        "bos": int(close > open_),
+                        "choch": int(close < open_),
+                        "breaker_block": int(high > open_),
+                        "pinbar": int(abs(high-close) < 0.2),
+                        "engulfing": int(abs(close-open_) > 0.5),
+                        "rsi": np.random.randint(20, 80),
+                        "ema_cross": int(open_ > close),
+                        "volume_spike": int(volume > np.mean(df["Volume"])),
+                        "fibo_zone": int(low < open_ < high),
+                        "trend_up": int(close > open_),
+                        "orderflow_score": 0,
+                        "entry": open_,
+                        "sl": min(low, open_),
+                        "tp": max(high, open_),
+                        "direction": "LONG" if close > open_ else "SHORT",
+                        "result": "win" if abs(close-open_) > 0.005*open_ else "loss",
+                        "delta": 0,
+                        "volatility": abs(high-low),
+                        "session_time": True,
+                        "block_trade": False
+                    }
+                    ds.append(feature)
+                except:
+                    continue
     if ds:
         pd.DataFrame(ds).to_csv(DATASET_FILE, index=False)
         print(f"Dataset {len(ds)} satır ile oluşturuldu.")
-    else:
-        print("Açık veri kaynaklarında uygun veri bulunamadı.")
 
-# ========== DATASET, SİNYAL, AI ==========
+# ====== DATASET, SİNYAL, AI ======
 
 def load_signals():
     if not os.path.exists(SIGNALS_FILE):
@@ -148,28 +127,32 @@ def retrain_ai_model_and_backtest():
         print("Dataset yok, AI retrain skip.")
         return
     df = pd.read_csv(DATASET_FILE)
-    features = ["score", "orderflow_score", "volatility"]
+    features = [
+        "liquidity_zone","order_block","fvg","bos","choch",
+        "breaker_block","pinbar","engulfing","rsi","ema_cross",
+        "volume_spike","fibo_zone","trend_up","orderflow_score","volatility"
+    ]
     X = df[features]
     y = (df["result"] == "win").astype(int)
     if X.shape[0] < 30:
         print("Yetersiz data. AI retrain skip.")
         return
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=42)
-    model = LogisticRegression(max_iter=200)
+    model = RandomForestClassifier(n_estimators=120, max_depth=6, random_state=42)
     model.fit(X_train, y_train)
     dump(model, MODEL_FILE)
     score = model.score(X_test, y_test)
     print(f"AI retrain OK, Backtest acc: {score:.2f}")
 
-def ai_score_predict(score, trend, delta, volatility, session_time=True):
+def ai_score_predict(features):
     if not os.path.exists(MODEL_FILE):
         return 1.0
     model = load(MODEL_FILE)
-    arr = np.array([[score, delta, volatility]])
+    arr = np.array([features])
     prob = model.predict_proba(arr)[0][1]
     return prob
 
-# ========== TELEGRAM ==========
+# TELEGRAM
 
 async def send_telegram_signal(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -177,23 +160,144 @@ async def send_telegram_signal(message):
     async with aiohttp.ClientSession() as session:
         await session.post(url, data=payload)
 
-# ========== SİNYAL ALGO ==========
+# ---- Gelişmiş Price Action/TA (Gerçek fonksiyonlar!)
+
+def find_liquidity_zones(candles, lookback=30, threshold=0.15):
+    # Mantıksal: Eşit tepe/dip (equal high/low)
+    highs, lows = [c[2] for c in candles], [c[3] for c in candles]
+    for i in range(2, lookback):
+        if abs(highs[-i] - highs[-i-1])/highs[-i] < threshold/100:
+            return 1
+        if abs(lows[-i] - lows[-i-1])/lows[-i] < threshold/100:
+            return 1
+    return 0
+
+def find_order_blocks(candles, lookback=30, body_ratio=0.6):
+    for i in range(-lookback, -1):
+        o, c, h, l = candles[i][1], candles[i][4], candles[i][2], candles[i][3]
+        body = abs(c - o)
+        if (c < o and body/(h-l) > body_ratio): return 1
+        if (c > o and body/(h-l) > body_ratio): return 1
+    return 0
+
+def find_fvg_zones(candles, lookback=30, min_gap=0.0005):
+    for i in range(-lookback, -3):
+        prev_low = candles[i-1][3]
+        curr_high = candles[i][2]
+        next_low = candles[i+1][3]
+        if curr_high < next_low and (next_low - curr_high) > min_gap:
+            return 1
+    return 0
+
+def check_bos_choch(candles, lookback=30):
+    highs = [c[2] for c in candles[-lookback:]]
+    lows = [c[3] for c in candles[-lookback:]]
+    closes = [c[4] for c in candles[-lookback:]]
+    highest, lowest = max(highs[:-1]), min(lows[:-1])
+    return int(highs[-1] > highest or lows[-1] < lowest)
+
+def breaker_block_liquidity_ema(candles, ema_period=50, lookback=30, proximity=0.1):
+    closes = [c[4] for c in candles]
+    ema = pd.Series(closes).ewm(span=ema_period).mean().values
+    for i in range(-lookback, -5):
+        if abs(ema[i] - closes[i]) / closes[i] < proximity:
+            return 1
+    return 0
+
+def detect_pinbar(candles, threshold=0.6):
+    for i in range(-10, -1):
+        this_high, this_low = candles[i][2], candles[i][3]
+        this_close, this_open = candles[i][4], candles[i][1]
+        body = abs(this_close - this_open)
+        upper_wick = this_high - max(this_close, this_open)
+        lower_wick = min(this_close, this_open) - this_low
+        total_range = this_high - this_low
+        if lower_wick > threshold * total_range and body < (1 - threshold) * total_range:
+            return 1
+        if upper_wick > threshold * total_range and body < (1 - threshold) * total_range:
+            return 1
+    return 0
+
+def detect_engulfing(candles):
+    for i in range(-10, -1):
+        prev_open = candles[i-1][1]; prev_close = candles[i-1][4]
+        this_close, this_open = candles[i][4], candles[i][1]
+        if prev_close < prev_open and this_close > this_open and this_close > prev_open and this_open < prev_close:
+            return 1
+        if prev_close > prev_open and this_close < this_open and this_close < prev_open and this_open > prev_close:
+            return 1
+    return 0
+
+def calc_rsi(candles, period=14):
+    closes = np.array([c[4] for c in candles])
+    if len(closes) < period+1: return 50
+    delta = np.diff(closes)
+    up, down = delta.clip(min=0), -delta.clip(max=0)
+    roll_up = np.mean(up[-period:])
+    roll_down = np.mean(down[-period:])
+    rs = roll_up/(roll_down + 1e-9)
+    rsi = 100 - (100/(1 + rs))
+    return round(rsi,2)
+
+def check_ema_cross(candles, fast=20, slow=50):
+    closes = pd.Series([c[4] for c in candles])
+    ema_fast = closes.ewm(span=fast, min_periods=fast).mean()
+    ema_slow = closes.ewm(span=slow, min_periods=slow).mean()
+    if len(ema_fast) < slow + 2: return 0
+    cross_up = ema_fast.iloc[-2] < ema_slow.iloc[-2] and ema_fast.iloc[-1] > ema_slow.iloc[-1]
+    cross_down = ema_fast.iloc[-2] > ema_slow.iloc[-2] and ema_fast.iloc[-1] < ema_slow.iloc[-1]
+    return int(cross_up or cross_down)
+
+def check_volume_spike(candles, lookback=30, spike_ratio=1.7):
+    volumes = [c[5] for c in candles[-lookback:]]
+    avg_vol = sum(volumes[:-2]) / (lookback - 2)
+    last_vol, prev_vol = volumes[-1], volumes[-2]
+    return int(last_vol > avg_vol * spike_ratio or prev_vol > avg_vol * spike_ratio)
+
+def check_fibonacci_golden(candles, swing_lookback=30):
+    closes = [c[4] for c in candles[-swing_lookback:]]
+    highs = [c[2] for c in candles[-swing_lookback:]]
+    lows = [c[3] for c in candles[-swing_lookback:]]
+    swing_high, swing_low = max(highs), min(lows)
+    golden_0618 = swing_high - (swing_high - swing_low) * 0.618
+    golden_0705 = swing_high - (swing_high - swing_low) * 0.705
+    last_close = closes[-1]
+    in_zone = golden_0705 <= last_close <= golden_0618
+    return int(in_zone)
+
+def trend_up(candles):
+    return int(candles[-1][4] > candles[-20][4])
+
+# BORSALAR & MARKETS
+
+EXCHANGES = {
+    "binance": ccxt.binance({"enableRateLimit": True}),
+    "bybit": ccxt.bybit({"enableRateLimit": True}),
+    "kucoin": ccxt.kucoin({"enableRateLimit": True}),
+}
+MARKETS = {
+    "binance": {
+        "symbols": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT"],
+        "timeframes": ["1m", "5m", "15m"]
+    },
+    "bybit": {
+        "symbols": ["BTC/USDT", "ETH/USDT"],
+        "timeframes": ["5m", "15m"]
+    },
+    "kucoin": {
+        "symbols": ["BTC/USDT", "ADA/USDT", "XRP/USDT"],
+        "timeframes": ["15m"]
+    },
+    "yahoo": {
+        "symbols": ["AAPL", "MSFT", "NVDA", "META", "GOOGL", "AMZN", "EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCAD=X"],
+        "timeframes": ["1h"]
+    }
+}
 
 def fetch_candles(exchange, symbol, timeframe, limit=150):
     try:
         if exchange == "yahoo":
-            # yfinance supported timeframes: 1m, 2m, 5m, 15m, 30m, 60m/1h, 90m, 1d, 5d, 1wk, 1mo, 3mo
-            if timeframe in ["1m", "2m", "5m", "15m", "30m", "90m"]:
-                period = "60d"
-            elif timeframe in ["1h", "60m"]:
-                period = "730d"
-            elif timeframe == "1d":
-                period = "5y"
-            elif timeframe in ["1wk", "1mo"]:
-                period = "max"
-            else:
-                period = "60d"
-            data = yf.download(symbol, period=period, interval=timeframe)
+            data = yf.download(symbol, period="30d", interval=timeframe)
             candles = []
             for i, row in data.iterrows():
                 candles.append([
@@ -224,131 +328,8 @@ def active_signal_exists(exchange, symbol, tf, direction):
             return True
     return False
 
-# ----- Price Action ve Teknik Analiz -----
-
-def find_liquidity_zones(candles, lookback=30, threshold=0.15):
-    equal_highs, equal_lows = [], []
-    for i in range(2, lookback):
-        h1 = candles[-i][2]; h2 = candles[-i-1][2]
-        l1 = candles[-i][3]; l2 = candles[-i-1][3]
-        if abs(h1 - h2) / h1 < threshold/100:
-            equal_highs.append((i, h1))
-        if abs(l1 - l2) / l1 < threshold/100:
-            equal_lows.append((i, l1))
-    return bool(equal_highs or equal_lows)
-
-def find_order_blocks(candles, lookback=30, body_ratio=0.6):
-    found = 0
-    for i in range(-lookback, -1):
-        o, c, h, l = candles[i][1], candles[i][4], candles[i][2], candles[i][3]
-        body = abs(c - o)
-        if (c < o and body / (h - l) > body_ratio):
-            found += 1
-        if (c > o and body / (h - l) > body_ratio):
-            found += 1
-    return found > 0
-
-def find_fvg_zones(candles, lookback=30, min_gap=0.0005):
-    found = 0
-    for i in range(-lookback, -3):
-        prev_low = candles[i-1][3]
-        curr_high = candles[i][2]
-        next_low = candles[i+1][3]
-        if curr_high < next_low and (next_low - curr_high) > min_gap:
-            found += 1
-    return found > 0
-
-def check_bos_choch(candles, lookback=30):
-    highs = [c[2] for c in candles[-lookback:]]
-    lows = [c[3] for c in candles[-lookback:]]
-    closes = [c[4] for c in candles[-lookback:]]
-    highest, lowest = max(highs[:-1]), min(lows[:-1])
-    return highs[-1] > highest or lows[-1] < lowest
-
-def breaker_block_liquidity_ema(candles, ema_period=50, lookback=30, proximity=0.1):
-    closes = [c[4] for c in candles]
-    ema = pd.Series(closes).ewm(span=ema_period).mean().values
-    for i in range(-lookback, -5):
-        if abs(ema[i] - closes[i]) / closes[i] < proximity:
-            return True
-    return False
-
-def detect_candle_pattern(candles, threshold=0.6):
-    for i in range(-10, -1):
-        prev_high, prev_low = candles[i-1][2], candles[i-1][3]
-        this_high, this_low = candles[i][2], candles[i][3]
-        this_close, this_open = candles[i][4], candles[i][1]
-        if this_high > prev_high and this_close < prev_high:
-            return True
-        if this_low < prev_low and this_close > prev_low:
-            return True
-    return False
-
-def mitigation_rsi_volume(candles, rsi_period=14, lookback=30, vol_mult=1.5):
-    closes = np.array([c[4] for c in candles[-lookback:]])
-    volumes = np.array([c[5] for c in candles[-lookback:]])
-    delta = np.diff(closes)
-    up = delta.clip(min=0); down = -delta.clip(max=0)
-    roll_up = np.convolve(up, np.ones(rsi_period), 'valid') / rsi_period
-    roll_down = np.convolve(down, np.ones(rsi_period), 'valid') / rsi_period
-    rs = roll_up / (roll_down + 1e-9)
-    rsi = 100 - (100 / (1 + rs))
-    avg_vol = volumes.mean()
-    return any(volumes[-10:] > avg_vol * vol_mult)
-
-def check_ema_cross(candles, fast=20, slow=50):
-    closes = pd.Series([c[4] for c in candles])
-    ema_fast = closes.ewm(span=fast, min_periods=fast).mean()
-    ema_slow = closes.ewm(span=slow, min_periods=slow).mean()
-    if len(ema_fast) < slow + 2: return False
-    cross_up = ema_fast.iloc[-2] < ema_slow.iloc[-2] and ema_fast.iloc[-1] > ema_slow.iloc[-1]
-    cross_down = ema_fast.iloc[-2] > ema_slow.iloc[-2] and ema_fast.iloc[-1] < ema_slow.iloc[-1]
-    return cross_up or cross_down
-
-def check_volume_spike(candles, lookback=30, spike_ratio=1.7):
-    volumes = [c[5] for c in candles[-lookback:]]
-    avg_vol = sum(volumes[:-2]) / (lookback - 2)
-    last_vol, prev_vol = volumes[-1], volumes[-2]
-    return last_vol > avg_vol * spike_ratio or prev_vol > avg_vol * spike_ratio
-
-def check_fibonacci_golden(candles, swing_lookback=30):
-    closes = [c[4] for c in candles[-swing_lookback:]]
-    highs = [c[2] for c in candles[-swing_lookback:]]
-    lows = [c[3] for c in candles[-swing_lookback:]]
-    swing_high, swing_low = max(highs), min(lows)
-    golden_0618 = swing_high - (swing_high - swing_low) * 0.618
-    golden_0705 = swing_high - (swing_high - swing_low) * 0.705
-    last_close = closes[-1]
-    in_zone = golden_0705 <= last_close <= golden_0618
-    return in_zone
-
-def ema_trend(candles):
-    if candles[-1][4] > candles[-20][4]: return "uptrend"
-    elif candles[-1][4] < candles[-20][4]: return "downtrend"
-    else: return "sideways"
-
-def advanced_score(candles, symbol):
-    score = 0
-    if find_liquidity_zones(candles): score += 1
-    if find_order_blocks(candles): score += 1
-    if find_fvg_zones(candles): score += 1
-    if check_bos_choch(candles): score += 1
-    if breaker_block_liquidity_ema(candles): score += 1
-    if detect_candle_pattern(candles): score += 1
-    if mitigation_rsi_volume(candles): score += 1
-    if check_ema_cross(candles): score += 1
-    if check_volume_spike(candles): score += 1
-    if check_fibonacci_golden(candles): score += 1
-    trend = ema_trend(candles)
-    if trend != "sideways": score += 1
-    orderflow_score = np.random.randint(0,2)
-    return score, trend, orderflow_score, {"delta": orderflow_score, "block_trade": False}
-
 def get_signal_direction(candles):
-    trend = ema_trend(candles)
-    if trend == "uptrend": return "LONG"
-    elif trend == "downtrend": return "SHORT"
-    else: return "LONG"
+    return "LONG" if candles[-1][4] > candles[-20][4] else "SHORT"
 
 def calc_atr_sl_tp(candles, rr_ratio=2.0, atr_period=14, direction="LONG"):
     highs = np.array([c[2] for c in candles[-atr_period-2:]])
@@ -364,38 +345,6 @@ def calc_atr_sl_tp(candles, rr_ratio=2.0, atr_period=14, direction="LONG"):
         sl = entry + atr_v
         tp = entry - atr_v * rr_ratio
     return round(sl, 4), round(tp, 4)
-
-# ========== BORSALAR & MARKETS ==========
-
-EXCHANGES = {
-    "binance": ccxt.binance({"enableRateLimit": True}),
-    "bybit": ccxt.bybit({"enableRateLimit": True}),
-    "kucoin": ccxt.kucoin({"enableRateLimit": True}),
-}
-
-MARKETS = {
-    "binance": {
-        "symbols": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT"],
-        "timeframes": ["1m", "5m", "15m", "1h", "4h", "1d"]
-    },
-    "bybit": {
-        "symbols": ["BTC/USDT", "ETH/USDT"],
-        "timeframes": ["5m", "15m", "1h", "4h", "1d"]
-    },
-    "kucoin": {
-        "symbols": ["BTC/USDT", "ADA/USDT", "XRP/USDT"],
-        "timeframes": ["15m", "1h", "4h", "1d"]
-    },
-    "yahoo": {
-        "symbols": [
-            "AAPL", "MSFT", "GOOGL", "META", "TSLA",
-            "EURUSD=X", "GBPUSD=X", "USDJPY=X",
-            "BTC-USD", "ETH-USD", "SOL-USD",
-            "^GSPC", "^IXIC", "XAUUSD=X", "CL=F"
-        ],
-        "timeframes": ["1m", "5m", "15m", "1h", "1d", "1wk", "1mo"]  # Uygun olanları bot kendisi dener.
-    }
-}
 
 # ========== ANA LOOP ==========
 
@@ -415,6 +364,7 @@ async def check_active_signals():
         last_price = candles[-1][4]
         signal_closed = False
         if (s["direction"] == "LONG" and last_price >= s["tp"]) or (s["direction"] == "SHORT" and last_price <= s["tp"]):
+            s["result"] = "
             s["result"] = "win"
             s["close_time"] = datetime.now(timezone.utc).isoformat()
             results.append(s)
@@ -439,13 +389,24 @@ async def check_active_signals():
                 f"Result: LOSS 💔"
             )
         if signal_closed:
-            entry = {
+            append_to_dataset({
                 "timestamp": s.get("open_time"),
                 "exchange": s.get("exchange"),
                 "symbol": s.get("symbol"),
                 "timeframe": s.get("timeframe"),
-                "score": s.get("score", 0),
-                "trend": s.get("trend", ""),
+                "liquidity_zone": s.get("liquidity_zone", 0),
+                "order_block": s.get("order_block", 0),
+                "fvg": s.get("fvg", 0),
+                "bos": s.get("bos", 0),
+                "choch": s.get("choch", 0),
+                "breaker_block": s.get("breaker_block", 0),
+                "pinbar": s.get("pinbar", 0),
+                "engulfing": s.get("engulfing", 0),
+                "rsi": s.get("rsi", 50),
+                "ema_cross": s.get("ema_cross", 0),
+                "volume_spike": s.get("volume_spike", 0),
+                "fibo_zone": s.get("fibo_zone", 0),
+                "trend_up": s.get("trend_up", 0),
                 "orderflow_score": s.get("orderflow_score", 0),
                 "entry": s.get("entry"),
                 "sl": s.get("sl"),
@@ -456,8 +417,7 @@ async def check_active_signals():
                 "volatility": s.get("volatility", 0),
                 "session_time": s.get("session_time", True),
                 "block_trade": s.get("block_trade", False)
-            }
-            append_to_dataset(entry)
+            })
         else:
             updated_signals.append(s)
     save_signals(updated_signals)
@@ -472,18 +432,42 @@ async def scan_all_markets():
             for symbol in ex_info["symbols"]:
                 for tf in ex_info["timeframes"]:
                     candles = fetch_candles(ex_name, symbol, tf, 150)
-                    if not candles or len(candles) < 30: continue
-                    score, trend, orderflow_score, extra = advanced_score(candles, symbol)
+                    if not candles or len(candles) < 100:
+                        continue
+
+                    # --- Bütün feature'ları doldur!
+                    liquidity_zone = find_liquidity_zones(candles)
+                    order_block = find_order_blocks(candles)
+                    fvg = find_fvg_zones(candles)
+                    bos = check_bos_choch(candles)
+                    choch = 1 if bos == 1 else 0  # Şartlı örnek
+                    breaker_block = breaker_block_liquidity_ema(candles)
+                    pinbar = detect_pinbar(candles)
+                    engulfing = detect_engulfing(candles)
+                    rsi = calc_rsi(candles)
+                    ema_cross = check_ema_cross(candles)
+                    volume_spike = check_volume_spike(candles)
+                    fibo_zone = check_fibonacci_golden(candles)
+                    trend_up_ = trend_up(candles)
+                    orderflow_score = np.random.randint(0, 2)
                     direction = get_signal_direction(candles)
                     sl, tp = calc_atr_sl_tp(candles, rr_ratio=2.0, direction=direction)
                     winrate = update_winrate()
-                    ai_prob = ai_score_predict(score, trend, extra["delta"], abs(candles[-1][2] - candles[-1][3]))
-                    if score >= 9 and not active_signal_exists(ex_name, symbol, tf, direction):
+
+                    features = [
+                        liquidity_zone, order_block, fvg, bos, choch,
+                        breaker_block, pinbar, engulfing, rsi, ema_cross,
+                        volume_spike, fibo_zone, trend_up_, orderflow_score,
+                        abs(candles[-1][2] - candles[-1][3])
+                    ]
+                    ai_prob = ai_score_predict(features)
+                    
+                    if sum(features[:13]) >= 9 and not active_signal_exists(ex_name, symbol, tf, direction):
                         last_close = candles[-1][4]
                         msg = (
                             f"🚨 {'🟢 LONG' if direction=='LONG' else '🔴 SHORT'} | {ex_name.upper()} | {symbol} | {tf}\n"
-                            f"🏅 Score: {score}/13 | 🤖 AI: %{round(ai_prob*100,1)}\n"
-                            f"Orderflow: Δ={extra['delta']} \n"
+                            f"🏅 Score: {sum(features[:13])}/13 | 🤖 AI: %{round(ai_prob*100,1)}\n"
+                            f"Orderflow: Δ={orderflow_score} \n"
                             f"📈 Entry: <b>{last_close}</b>\n"
                             f"⛔️ SL: <b>{sl}</b>\n"
                             f"🎯 TP: <b>{tp}</b>\n"
@@ -499,15 +483,26 @@ async def scan_all_markets():
                             "sl": sl,
                             "tp": tp,
                             "direction": direction,
-                            "score": score,
-                            "trend": trend,
+                            "liquidity_zone": liquidity_zone,
+                            "order_block": order_block,
+                            "fvg": fvg,
+                            "bos": bos,
+                            "choch": choch,
+                            "breaker_block": breaker_block,
+                            "pinbar": pinbar,
+                            "engulfing": engulfing,
+                            "rsi": rsi,
+                            "ema_cross": ema_cross,
+                            "volume_spike": volume_spike,
+                            "fibo_zone": fibo_zone,
+                            "trend_up": trend_up_,
                             "orderflow_score": orderflow_score,
                             "open_time": datetime.now(timezone.utc).isoformat(),
                             "result": None,
-                            "delta": extra["delta"],
+                            "delta": orderflow_score,
                             "volatility": abs(candles[-1][2]-candles[-1][3]),
                             "session_time": True,
-                            "block_trade": extra.get("block_trade", False)
+                            "block_trade": False
                         })
                         save_signals(signals)
                         break
