@@ -1,8 +1,0 @@
-ccxt
-pandas
-numpy
-aiohttp
-python-dotenv
-yfinance
-python-binance
-scikit-learn
