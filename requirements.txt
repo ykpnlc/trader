@@ -1,8 +1,0 @@
-ccxt>=4.0.0
-aiohttp
-pandas
-numpy
-scikit-learn
-joblib
-python-dotenv
-yfinance
