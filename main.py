@@ -364,7 +364,7 @@ async def check_active_signals():
         last_price = candles[-1][4]
         signal_closed = False
         if (s["direction"] == "LONG" and last_price >= s["tp"]) or (s["direction"] == "SHORT" and last_price <= s["tp"]):
-            s["result"] = "
+            s["result"] = ""
             s["result"] = "win"
             s["close_time"] = datetime.now(timezone.utc).isoformat()
             results.append(s)
