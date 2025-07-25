@@ -1,0 +1,6 @@
+ccxt
+pandas
+numpy
+aiohttp
+python-dotenv
+yfinance
