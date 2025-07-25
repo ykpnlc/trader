@@ -478,7 +478,7 @@ async def scan_all_markets():
                     sl, tp = calc_atr_sl_tp(candles, rr_ratio=2.0, direction=direction)
                     winrate = update_winrate()
                     ai_prob = ai_score_predict(score, trend, extra["delta"], abs(candles[-1][2] - candles[-1][3]))
-                    if score >= 9 and not active_signal_exists(ex_name, symbol, tf, direction):
+                    if score >= 7 and not active_signal_exists(ex_name, symbol, tf, direction):
                         last_close = candles[-1][4]
                         msg = (
                             f"🚨 {'🟢 LONG' if direction=='LONG' else '🔴 SHORT'} | {ex_name.upper()} | {symbol} | {tf}\n"
