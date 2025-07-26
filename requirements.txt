@@ -2,9 +2,8 @@ ccxt
 pandas
 numpy
 aiohttp
+requests
 python-dotenv
 yfinance
-requests
 scikit-learn
 joblib
-xgboost
