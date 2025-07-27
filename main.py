@@ -1,5 +1,6 @@
 import os
 import time
+import pickle
 import pandas as pd
 import numpy as np
 from dotenv import load_dotenv
@@ -40,35 +41,50 @@ def send_telegram(message, reply_to=None):
 
 # ----- OANDA VERİ ÇEKME -----
 def fetch_oanda(symbol, count=100, granularity="M1"):
-    client = API(access_token=OANDA_API_KEY)
-    params = {"count": count, "granularity": granularity, "price": "M"}
-    r = InstrumentsCandles(instrument=symbol, params=params)
-    data = client.request(r)
-    candles = data['candles']
-    df = pd.DataFrame([{
-        "time": x["time"],
-        "open": float(x["mid"]["o"]),
-        "high": float(x["mid"]["h"]),
-        "low": float(x["mid"]["l"]),
-        "close": float(x["mid"]["c"]),
-        "volume": float(x["volume"]),
-    } for x in candles if x['complete']])
-    return df
+    try:
+        client = API(access_token=OANDA_API_KEY)
+        params = {"count": count, "granularity": granularity, "price": "M"}
+        r = InstrumentsCandles(instrument=symbol, params=params)
+        data = client.request(r)
+        candles = data['candles']
+        df = pd.DataFrame([{
+            "time": x["time"],
+            "open": float(x["mid"]["o"]),
+            "high": float(x["mid"]["h"]),
+            "low": float(x["mid"]["l"]),
+            "close": float(x["mid"]["c"]),
+            "volume": float(x["volume"]),
+        } for x in candles if x['complete']])
+        return df
+    except Exception as e:
+        print(f"OANDA veri hatası: {symbol} -> {e}")
+        return pd.DataFrame()
 
 # ----- CCXT (KRİPTO) VERİ ÇEKME -----
 def fetch_ccxt(symbol, timeframe='1m', limit=100):
-    binance = ccxt.binance()
-    ohlcv = binance.fetch_ohlcv(symbol, timeframe, limit=limit)
-    df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
-    df["time"] = pd.to_datetime(df["timestamp"], unit="ms")
-    return df
+    try:
+        binance = ccxt.binance()
+        ohlcv = binance.fetch_ohlcv(symbol, timeframe, limit=limit)
+        df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+        df["time"] = pd.to_datetime(df["timestamp"], unit="ms")
+        return df
+    except Exception as e:
+        print(f"Kripto veri hatası: {symbol} -> {e}")
+        return pd.DataFrame()
 
 # ----- YFINANCE (HİSSE/ENDEKS) VERİ ÇEKME -----
 def fetch_yfinance(symbol, interval="1m", period="2d"):
-    df = yf.download(tickers=symbol, interval=interval, period=period)
-    df.reset_index(inplace=True)
-    df.rename(columns={"Datetime": "time"}, inplace=True)
-    return df
+    try:
+        df = yf.download(tickers=symbol, interval=interval, period=period)
+        df.reset_index(inplace=True)
+        df.columns = [c.lower() for c in df.columns]  # Sütun isimlerini küçük harfe çevir
+        if 'close' not in df.columns:
+            raise Exception("YFinance veri çekimi hatalı: 'close' sütunu yok!")
+        df.rename(columns={"datetime": "time"}, inplace=True)
+        return df
+    except Exception as e:
+        print(f"Hisse veri hatası: {symbol} -> {e}")
+        return pd.DataFrame()
 
 # ----- GERÇEK TEKNİK/PA ANALİZ FONKSİYONLARI -----
 def calc_ema(series, period=8):
@@ -84,16 +100,14 @@ def calc_rsi(series, period=14):
     return 100 - (100 / (1 + rs))
 
 def detect_bos(df, lookback=20):
-    # Gerçek BoS: son yüksek tepe yukarı kırıldıysa (long için örnek)
     highs = df["high"].tail(lookback)
     prev_highs = highs[:-1]
     if df["close"].iloc[-1] > prev_highs.max():
-        return 1  # BoS var
+        return 1
     else:
         return 0
 
 def detect_order_block(df, window=20):
-    # Çok basit: son window içindeki büyük volümlü ters mum varsa order block
     for i in range(-window, -1):
         body = abs(df["close"].iloc[i] - df["open"].iloc[i])
         wick = df["high"].iloc[i] - df["low"].iloc[i]
@@ -108,19 +122,54 @@ def pa_features(df):
         "rsi_14": calc_rsi(df["close"], 14).iloc[-1],
         "bos": detect_bos(df),
         "order_block": detect_order_block(df),
-        # Ek: burada başka gerçek analiz fonksiyonları da eklenir
+        # Ek modüller buraya eklenebilir
     }
     return features
 
-# ----- AI MODEL -----
+# ----- AI MODEL LOADER & TRAINER -----
+def load_or_train_ai_model():
+    model_file = "ai_model.json"
+    scaler_file = "scaler.pkl"
+
+    # Eğer model ve scaler dosyaları varsa yükle
+    if os.path.exists(model_file) and os.path.exists(scaler_file):
+        model = XGBClassifier()
+        model.load_model(model_file)
+        with open(scaler_file, "rb") as f:
+            scaler = pickle.load(f)
+        print("AI modeli ve scaler yüklendi.")
+        return model, scaler
+
+    # Yoksa: Açık kaynak bir dataset ile fit et!
+    print("Model yok, yeni eğitim başlatılıyor...")
+    # ÖRNEK DUMMY DATASET: Bunu kendi gerçek datasetinle değiştir!
+    # Price action ve teknik feature'larla zenginleştirilmiş örnek data:
+    # Sütunlar: ema_8, ema_21, rsi_14, bos, order_block, label
+    # label: 1 (win), 0 (loss)
+    df = pd.read_csv("btc_usdt_1m_features.csv")  # <-- örnek dosya, senin datasetin!
+    features = ["ema_8", "ema_21", "rsi_14", "bos", "order_block"]
+    X = df[features].values
+    y = df["label"].values
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    model = XGBClassifier()
+    model.fit(X_scaled, y)
+    # Kaydet
+    model.save_model(model_file)
+    with open(scaler_file, "wb") as f:
+        pickle.dump(scaler, f)
+    print("AI modeli ve scaler eğitildi ve kaydedildi.")
+    return model, scaler
+
+# ----- SİNYAL OLUŞTURMA VE TAKİP -----
 def ai_predict(features, model, scaler):
     X = np.array(list(features.values())).reshape(1, -1)
     X_scaled = scaler.transform(X)
     score = model.predict_proba(X_scaled)[0][1]
     return score
 
-# ----- SİNYAL OLUŞTURMA VE TAKİP -----
 def check_and_send_signal(symbol, df, market_type, model, scaler):
+    if len(df) < 25: return  # yeterli veri yoksa atla
     features = pa_features(df)
     ai_score = ai_predict(features, model, scaler)
     if ai_score > 0.65:
@@ -151,7 +200,8 @@ def track_signals(df_dict):
     for sig in active_signals:
         if not sig["active"]:
             continue
-        df = df_dict[sig["symbol"]]
+        df = df_dict.get(sig["symbol"], None)
+        if df is None or len(df) == 0: continue
         last_price = df["close"].iloc[-1]
         if last_price >= sig["tp"]:
             send_telegram(f"🎯 *WIN!* Parite: `{sig['symbol']}` TP’ye ulaştı! Giriş: `{sig['entry']}` ➡️ Çıkış: `{last_price}`", reply_to=sig["msg_id"])
@@ -162,44 +212,21 @@ def track_signals(df_dict):
 
 # ----- ANA LOOP -----
 def main_loop():
-    try:
-        model = XGBClassifier()
-        scaler = StandardScaler()
-        # Burada open-source dataset ile pre-train edilmiş model ve scaler yükle!
-        # Örn: model.load_model("ai_model.json"), scaler = joblib.load("scaler.pkl")
-    except Exception as e:
-        print("AI modeli yüklenemedi:", e)
-        return
-
+    model, scaler = load_or_train_ai_model()
     while True:
         df_dict = {}
-        # FOREX
         for symbol in FOREX_SYMBOLS:
-            try:
-                df = fetch_oanda(symbol)
-                df_dict[symbol] = df
-                check_and_send_signal(symbol, df, "FOREX", model, scaler)
-            except Exception as e:
-                print(f"OANDA veri hatası: {symbol} -> {e}")
-
-        # CRYPTO
+            df = fetch_oanda(symbol)
+            if len(df): df_dict[symbol] = df
+            check_and_send_signal(symbol, df, "FOREX", model, scaler)
         for symbol in CRYPTO_SYMBOLS:
-            try:
-                df = fetch_ccxt(symbol)
-                df_dict[symbol] = df
-                check_and_send_signal(symbol, df, "CRYPTO", model, scaler)
-            except Exception as e:
-                print(f"Kripto veri hatası: {symbol} -> {e}")
-
-        # STOCKS
+            df = fetch_ccxt(symbol)
+            if len(df): df_dict[symbol] = df
+            check_and_send_signal(symbol, df, "CRYPTO", model, scaler)
         for symbol in STOCK_SYMBOLS:
-            try:
-                df = fetch_yfinance(symbol)
-                df_dict[symbol] = df
-                check_and_send_signal(symbol, df, "STOCK", model, scaler)
-            except Exception as e:
-                print(f"Hisse veri hatası: {symbol} -> {e}")
-
+            df = fetch_yfinance(symbol)
+            if len(df): df_dict[symbol] = df
+            check_and_send_signal(symbol, df, "STOCK", model, scaler)
         track_signals(df_dict)
         time.sleep(60)
 
