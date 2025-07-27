@@ -1,9 +1,9 @@
+python-dotenv
 ccxt
+yfinance
+oandapyV20
+requests
+xgboost
+scikit-learn
 pandas
 numpy
-aiohttp
-requests
-python-dotenv
-yfinance
-scikit-learn
-joblib
