@@ -1,15 +1,32 @@
 # config.py
 
 # En yaygın 50 kripto para paritesi (USDT bazlı)
-COIN_LIST = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT', 'DOGE/USDT', 'ADA/USDT', 'AVAX/USDT', 'DOT/USDT', 'SHIB/USDT', 'LINK/USDT', 'MATIC/USDT', 'TON/USDT', 'TRX/USDT', 'LTC/USDT', 'BCH/USDT', 'XLM/USDT', 'ATOM/USDT', 'UNI/USDT', 'FIL/USDT', 'ETC/USDT', 'ICP/USDT', 'HBAR/USDT', 'APT/USDT', 'VET/USDT', 'RNDR/USDT', 'NEAR/USDT', 'SAND/USDT', 'MANA/USDT', 'EGLD/USDT', 'FTM/USDT', 'THETA/USDT', 'AAVE/USDT', 'KAVA/USDT', 'CRO/USDT', 'GRT/USDT', 'ALGO/USDT', 'AR/USDT', 'FLOW/USDT', 'CHZ/USDT', 'XMR/USDT', 'XTZ/USDT', 'ENS/USDT', '1INCH/USDT', 'DYDX/USDT', 'AXS/USDT', 'RUNE/USDT', 'ZEC/USDT', 'LDO/USDT', 'COMP/USDT']
+COIN_LIST = [
+    "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT", "DOGE/USDT",
+    "ADA/USDT", "AVAX/USDT", "DOT/USDT", "SHIB/USDT", "LINK/USDT", "MATIC/USDT",
+    "TON/USDT", "TRX/USDT", "LTC/USDT", "BCH/USDT", "XLM/USDT", "ATOM/USDT",
+    "UNI/USDT", "FIL/USDT", "ETC/USDT", "ICP/USDT", "HBAR/USDT", "APT/USDT",
+    "VET/USDT", "RNDR/USDT", "NEAR/USDT", "SAND/USDT", "MANA/USDT", "EGLD/USDT",
+    "FTM/USDT", "THETA/USDT", "AAVE/USDT", "KAVA/USDT", "CRO/USDT", "GRT/USDT",
+    "ALGO/USDT", "AR/USDT", "FLOW/USDT", "CHZ/USDT", "XMR/USDT", "XTZ/USDT",
+    "ENS/USDT", "1INCH/USDT", "DYDX/USDT", "AXS/USDT", "RUNE/USDT", "ZEC/USDT",
+    "LDO/USDT", "COMP/USDT"
+]
 
-# Taranacak zaman dilimleri
-TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"]
+# Taranacak zaman dilimleri (dict formatında)
+TIMEFRAMES = {
+    "1m": "1m",
+    "5m": "5m",
+    "15m": "15m",
+    "1h": "1h",
+    "4h": "4h",
+    "1d": "1d"
+}
 
-# Döngü aralığı (saniye)
+# Döngü süresi (saniye)
 LOOP_INTERVAL = 60
 
-# Telegram ayarları (doldurulmalı)
+# Telegram
 TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN_HERE"
 TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
 
