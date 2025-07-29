@@ -1,6 +1,0 @@
-ccxt>=1.93.74
-pandas
-requests
-python-telegram-bot
-schedule
-ta
