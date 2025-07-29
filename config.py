@@ -1,19 +1,7 @@
-# config.py
+# Auto-generated config file
 
-# En yaygın 50 kripto para paritesi (USDT bazlı)
-COIN_LIST = [
-    "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT", "DOGE/USDT",
-    "ADA/USDT", "AVAX/USDT", "DOT/USDT", "SHIB/USDT", "LINK/USDT", "MATIC/USDT",
-    "TON/USDT", "TRX/USDT", "LTC/USDT", "BCH/USDT", "XLM/USDT", "ATOM/USDT",
-    "UNI/USDT", "FIL/USDT", "ETC/USDT", "ICP/USDT", "HBAR/USDT", "APT/USDT",
-    "VET/USDT", "RNDR/USDT", "NEAR/USDT", "SAND/USDT", "MANA/USDT", "EGLD/USDT",
-    "FTM/USDT", "THETA/USDT", "AAVE/USDT", "KAVA/USDT", "CRO/USDT", "GRT/USDT",
-    "ALGO/USDT", "AR/USDT", "FLOW/USDT", "CHZ/USDT", "XMR/USDT", "XTZ/USDT",
-    "ENS/USDT", "1INCH/USDT", "DYDX/USDT", "AXS/USDT", "RUNE/USDT", "ZEC/USDT",
-    "LDO/USDT", "COMP/USDT"
-]
+COIN_LIST = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'XRP/USDT', 'SOL/USDT', 'ADA/USDT', 'DOGE/USDT', 'AVAX/USDT', 'SHIB/USDT', 'DOT/USDT', 'TRX/USDT', 'LINK/USDT', 'MATIC/USDT', 'LTC/USDT', 'BCH/USDT', 'ATOM/USDT', 'NEAR/USDT', 'APT/USDT', 'INJ/USDT', 'RNDR/USDT']
 
-# Taranacak zaman dilimleri (dict formatında)
 TIMEFRAMES = {
     "1m": "1m",
     "5m": "5m",
@@ -23,14 +11,7 @@ TIMEFRAMES = {
     "1d": "1d"
 }
 
-# Döngü süresi (saniye)
 LOOP_INTERVAL = 60
 
-# Telegram
-TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN_HERE"
-TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
-
-# Geri test ayarları
-BACKTEST_MODE = False
-BACKTEST_START_DATE = "2024-01-01"
-BACKTEST_END_DATE = "2024-12-31"
+TELEGRAM_BOT_TOKEN = "your_bot_token_here"
+TELEGRAM_CHAT_ID = "your_chat_id_here"
