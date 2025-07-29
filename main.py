@@ -17,7 +17,7 @@ def main_loop():
                     print(f"❌ Veri çekme başarısız: {symbol} ({tf_label})")
                     continue
                 print(f"✅ Veri alındı: {symbol} ({tf_label}) - {len(ohlcv)} mum")
-                signal, details = analyze_market(ohlcv)
+                signal, details = analyze_market(ohlcv, symbol, tf_label)
                 if signal:
                     print(f"📨 Sinyal bulundu: {symbol} ({tf_label}) - {signal}")
                     send_signal(symbol, tf_label, signal, details)
