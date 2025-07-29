@@ -1,19 +1,9 @@
 
-from fetch_pairs import fetch_all_usdt_pairs
+COIN_LIST = [
+    "BTC/USDT", "ETH/USDT", "XRP/USDT", "BNB/USDT", "SOL/USDT",
+    "ADA/USDT", "DOGE/USDT", "DOT/USDT", "AVAX/USDT", "MATIC/USDT"
+]
 
-# Coin listesi otomatik çekilir
-COIN_LIST = fetch_all_usdt_pairs()
+TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h"]
 
-# Zaman dilimleri (scalping için kısa zaman)
-TIMEFRAMES = ["1m", "5m"]
-
-# Sinyal puan eşiği (test modu için düşürüldü)
-SIGNAL_SCORE_THRESHOLD = 5
-
-# Telegram ayarları (Railway'de env olarak tanımlanmalı)
-import os
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-
-# Test modu
-TEST_MODE = True
+LOOP_INTERVAL = 60  # saniye (Her 60 saniyede bir analiz yapılır)
