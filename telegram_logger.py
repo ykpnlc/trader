@@ -1,51 +1,47 @@
 
 import requests
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
-def send_signal(pair, direction, score, reasons, chart_path=None):
-    message = f"🔔 *ALERT* 🔔\n"               f"*Pair:* `{pair}`\n"               f"*Direction:* `{direction.upper()}`\n"               f"*Score:* `{score}`\n"               f"*Reasons:*\n" + "\n".join([f"- {r}" for r in reasons])
+def send_signal(pair, direction, exchange, timeframe, score, ai_score, orderflow, entry, sl, tp, winrate, bot_token, chat_id, reply_to_message_id=None):
+    message = f"""
+{'🔴 SHORT' if direction == 'SHORT' else '🟢 LONG'} | {exchange.upper()} | {pair.upper()} | {timeframe}
+🏅 Score: {score}   🤖 AI: %{ai_score}
+Orderflow: Δ={orderflow}
+📈 Entry: {entry}
+🛑 SL: {sl}
+🎯 TP: {tp}
+✅ WINRATE: %{winrate}
+"""
 
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
+        "chat_id": chat_id,
         "text": message,
-        "parse_mode": "Markdown"
+        "parse_mode": "HTML"
+    }
+    if reply_to_message_id:
+        payload["reply_to_message_id"] = reply_to_message_id
+
+    response = requests.post(url, data=payload)
+    if response.status_code == 200:
+        print("✅ Sinyal gönderildi:", pair)
+        return response.json().get("result", {}).get("message_id")
+    else:
+        print("❌ Telegram mesajı gönderilemedi.")
+        return None
+
+def send_result(bot_token, chat_id, result_type, reply_to_message_id):
+    emoji = "✅ WIN" if result_type == "WIN" else "❌ LOSS"
+    message = f"{emoji} - Pozisyon sonucu"
+
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": message,
+        "reply_to_message_id": reply_to_message_id
     }
 
-    try:
-        requests.post(url, data=payload)
-    except Exception as e:
-        print("Telegram mesaj hatası:", e)
-        return False
-
-    if chart_path:
-        send_photo(chart_path)
-
-    return True
-
-def send_result_message(pair, result):
-    message = f"📊 *Signal Result:* `{pair}` → *{result}*"
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-        "parse_mode": "Markdown"
-    }
-    try:
-        requests.post(url, data=payload)
-    except Exception as e:
-        print("Telegram sonuç mesaj hatası:", e)
-
-def send_photo(file_path):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
-    try:
-        with open(file_path, 'rb') as photo:
-            data = {
-                "chat_id": TELEGRAM_CHAT_ID
-            }
-            files = {
-                "photo": photo
-            }
-            requests.post(url, data=data, files=files)
-    except Exception as e:
-        print("Telegram görsel gönderim hatası:", e)
+    response = requests.post(url, data=payload)
+    if response.status_code == 200:
+        print(f"📨 {result_type} mesajı gönderildi.")
+    else:
+        print("❌ Sonuç mesajı gönderilemedi.")
