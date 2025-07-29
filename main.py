@@ -1,53 +1,60 @@
+from strategy import analyze_market
+from telegram import send_signal_message, send_result_message
+from market_data import fetch_price_data
+from winrate_tracker import check_signal_results
+from config import COIN_LIST, TIMEFRAMES, LOOP_INTERVAL
+import json
 import time
-import requests
-import ccxt  # Binance için API
-from datetime import datetime
+import os
 
-# === TELEGRAM BİLGİLERİN ===
-TELEGRAM_BOT_TOKEN = 'TELEGRAM_BOT_TOKENINIZI_GİRİN'
-TELEGRAM_CHAT_ID = 'CHAT_ID_NIZI_GİRİN'
+SIGNAL_REGISTRY_PATH = "signal_registry.json"
+ACTIVE_SIGNALS_PATH = "active_signals.json"
 
-# === SEVİYELER ===
-RESISTANCE = 3.1450
-SUPPORT = 3.1050
-BREAKOUT = 3.1500
+# Yükleme veya boş başlatma
+def load_json(path):
+    if not os.path.exists(path):
+        return {}
+    with open(path, 'r') as f:
+        return json.load(f)
 
-# === EXCHANGE ===
-exchange = ccxt.binance()
+def save_json(path, data):
+    with open(path, 'w') as f:
+        json.dump(data, f, indent=2)
 
-def get_price():
-    ticker = exchange.fetch_ticker('XRP/USDT')
-    return float(ticker['last'])
+def main_loop():
+    signal_registry = load_json(SIGNAL_REGISTRY_PATH)
+    active_signals = load_json(ACTIVE_SIGNALS_PATH)
 
-def send_telegram_message(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    data = {
-        'chat_id': TELEGRAM_CHAT_ID,
-        'text': message
-    }
-    requests.post(url, data=data)
-
-def check_levels():
-    price = get_price()
-    now = datetime.now().strftime("%H:%M:%S")
-    
-    if price >= BREAKOUT:
-        send_telegram_message(f"[{now}] 🚀 XRP fiyatı {price:.4f} ile direnci kırdı! LONG için uygun olabilir.")
-    elif price >= RESISTANCE:
-        send_telegram_message(f"[{now}] ⚠️ XRP fiyatı {price:.4f} - direnç bölgesine yaklaştı.")
-    elif price <= SUPPORT:
-        send_telegram_message(f"[{now}] 🔻 XRP fiyatı {price:.4f} - destek bölgesine düştü. LONG fırsatı kollanabilir.")
-    else:
-        print(f"[{now}] XRP Fiyatı: {price:.4f} - İzleniyor...")
-
-def main():
     while True:
-        try:
-            check_levels()
-            time.sleep(60)  # 60 saniyede bir kontrol
-        except Exception as e:
-            print(f"Hata: {e}")
-            time.sleep(60)
+        for coin in COIN_LIST:
+            try:
+                data = fetch_price_data(coin)
+                signal = analyze_market(coin, data)
+
+                if signal:
+                    coin_key = f"{coin}-{signal['direction']}"
+                    if coin_key not in signal_registry:
+                        msg_id = send_signal_message(coin, signal)
+                        signal_registry[coin_key] = {
+                            "timestamp": time.time()
+                        }
+                        active_signals[coin] = {
+                            **signal,
+                            "status": "open",
+                            "message_id": msg_id
+                        }
+                        save_json(SIGNAL_REGISTRY_PATH, signal_registry)
+                        save_json(ACTIVE_SIGNALS_PATH, active_signals)
+
+            except Exception as e:
+                print(f"{coin} analiz hatası: {e}")
+
+        # TP veya SL kontrolü
+        updated_signals = check_signal_results(active_signals)
+        if updated_signals is not None:
+            save_json(ACTIVE_SIGNALS_PATH, updated_signals)
+
+        time.sleep(LOOP_INTERVAL)
 
 if __name__ == "__main__":
-    main()
+    main_loop()
