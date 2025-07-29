@@ -1,9 +1,2 @@
-python-dotenv
 ccxt
-yfinance
-oandapyV20
 requests
-xgboost
-scikit-learn
-pandas
-numpy
